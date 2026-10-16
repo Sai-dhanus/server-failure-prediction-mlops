@@ -1,0 +1,34 @@
+
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# MLflow tracking databases and artifacts
+mlflow.db
+mlflow.db-*
+mlruns/
+artifacts/
+
+# Model files generated locally
+*.joblib
+*.pkl
+
+# Logs
+*.log
+
+# IDE and operating system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
