@@ -31,3 +31,6 @@ jobs:
           MLFLOW_DATA_DIR: ${{ github.workspace }}
           MLFLOW_TRACKING_URI: sqlite:///${{ github.workspace }}/mlflow.db
         run: python -m pytest -v
+      
+      - name: Build Docker image
+        run: docker build -t server-failure-api:${{ github.sha }} .
