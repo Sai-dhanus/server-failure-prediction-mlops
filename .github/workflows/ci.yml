@@ -1,4 +1,8 @@
 
+permissions:
+  contents: read
+  packages: write
+
 name: Server Failure API CI
 
 on:
@@ -33,4 +37,15 @@ jobs:
         run: python -m pytest -v
       
       - name: Build Docker image
-        run: docker build -t server-failure-api:${{ github.sha }} .
+        run: |
+          IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY,,}/server-failure-api
+          echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
+          docker build -t "$IMAGE_NAME:${GITHUB_SHA}" -t "$IMAGE_NAME:latest" .
+
+      - name: Log in to GitHub Container Registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Push Docker image
+        run: |
+          docker push "$IMAGE_NAME:${GITHUB_SHA}"
+          docker push "$IMAGE_NAME:latest"
