@@ -32,3 +32,10 @@ artifacts/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Local Kubernetes image archive
+server-failure-api-k8s.tar
+
+# Local MLflow data
+mlflow.db
+mlruns/

@@ -1,49 +1,76 @@
 
 import os
+import logging
+from contextlib import asynccontextmanager
+
 import mlflow
 import mlflow.sklearn
 from mlflow import MlflowClient
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 import pandas as pd
 
-# Use environment variables so the same API works on Windows and Docker.
-MLFLOW_DATA_DIR = os.getenv(
-    "MLFLOW_DATA_DIR",
-    "/mlflow-data"
-)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
+MLFLOW_DATA_DIR = os.getenv("MLFLOW_DATA_DIR", "/mlflow-data")
 MLFLOW_TRACKING_URI = os.getenv(
     "MLFLOW_TRACKING_URI",
-    "sqlite:////mlflow-data/mlflow.db"
+    "sqlite:////mlflow-data/mlflow.db",
 )
 
 mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
 
-client = MlflowClient()
+# The model is unavailable until startup loading succeeds.
+model = None
+champion = None
 
-champion = client.get_model_version_by_alias(
-    "server-failure-model",
-    "champion"
-)
 
-model_id = champion.source.split("/")[-1]
+def load_model():
+    global model, champion
 
-model_path = os.path.join(
-    MLFLOW_DATA_DIR,
-    "mlruns",
-    "1",
-    "models",
-    model_id,
-    "artifacts"
-)
+    client = MlflowClient()
 
-model = mlflow.sklearn.load_model(model_path)
+    champion = client.get_model_version_by_alias(
+        "server-failure-model",
+        "champion",
+    )
+
+    model_id = champion.source.split("/")[-1]
+
+    model_path = os.path.join(
+        MLFLOW_DATA_DIR,
+        "mlruns",
+        "1",
+        "models",
+        model_id,
+        "artifacts",
+    )
+
+    model = mlflow.sklearn.load_model(model_path)
+
+    logger.info(
+        "Loaded server-failure-model version %s",
+        champion.version,
+    )
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        load_model()
+    except Exception:
+        # Keep the API alive so health endpoints can report the problem.
+        logger.exception("ML model loading failed")
+
+    yield
+
 
 app = FastAPI(
     title="Server Failure Prediction API",
     description="Predict server failure using an MLflow model",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 
@@ -59,17 +86,40 @@ def root():
     return {"message": "Server Failure Prediction API is running"}
 
 
-@app.get("/health")
-def health():
+@app.get("/health/live")
+def liveness():
+    return {"status": "alive"}
+
+
+@app.get("/health/ready")
+def readiness():
+    if model is None or champion is None:
+        raise HTTPException(
+            status_code=503,
+            detail="ML model is not ready",
+        )
+
     return {
-        "status": "healthy",
+        "status": "ready",
         "model_name": "server-failure-model",
         "model_version": champion.version,
     }
 
 
+# Keep the original health endpoint for compatibility.
+@app.get("/health")
+def health():
+    return readiness()
+
+
 @app.post("/predict")
 def predict(metrics: ServerMetrics):
+    if model is None or champion is None:
+        raise HTTPException(
+            status_code=503,
+            detail="ML model is not ready",
+        )
+
     input_data = pd.DataFrame(
         [
             {
@@ -93,4 +143,3 @@ def predict(metrics: ServerMetrics):
         "model_name": "server-failure-model",
         "model_version": champion.version,
     }
-

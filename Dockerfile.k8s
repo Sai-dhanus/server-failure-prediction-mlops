@@ -1,0 +1,20 @@
+
+FROM python:3.13-slim
+
+WORKDIR /app
+
+COPY server_failure_project/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY server_failure_project/api.py .
+
+# Include MLflow database and model artifacts for local learning.
+COPY mlflow.db /mlflow-data/mlflow.db
+COPY mlruns /mlflow-data/mlruns
+
+ENV MLFLOW_DATA_DIR=/mlflow-data
+ENV MLFLOW_TRACKING_URI=sqlite:////mlflow-data/mlflow.db
+
+EXPOSE 8000
+
+CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000"]

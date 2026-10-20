@@ -1,0 +1,62 @@
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: server-failure-api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: server-failure-api
+  template:
+    metadata:
+      labels:
+        app: server-failure-api
+    spec:
+      containers:
+        - name: api
+          image: server-failure-api:k8s
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          env:
+            - name: MLFLOW_DATA_DIR
+              value: /mlflow-data
+            - name: MLFLOW_TRACKING_URI
+              value: sqlite:////mlflow-data/mlflow.db
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "768Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: server-failure-api
+spec:
+  type: NodePort
+  selector:
+    app: server-failure-api
+  ports:
+    - port: 8000
+      targetPort: 8000
+      nodePort: 30080
