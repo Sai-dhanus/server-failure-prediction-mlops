@@ -21,9 +21,23 @@ spec:
             - containerPort: 8000
           env:
             - name: MLFLOW_DATA_DIR
-              value: /mlflow-data
+              valueFrom:
+                configMapKeyRef:
+                  name: server-failure-api-config
+                  key: MLFLOW_DATA_DIR
+
             - name: MLFLOW_TRACKING_URI
-              value: sqlite:////mlflow-data/mlflow.db
+              valueFrom:
+                configMapKeyRef:
+                  name: server-failure-api-config
+                  key: MLFLOW_TRACKING_URI
+
+            - name: DEMO_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: server-failure-api-secret
+                  key: DEMO_API_KEY
+                  
           readinessProbe:
             httpGet:
               path: /health/ready

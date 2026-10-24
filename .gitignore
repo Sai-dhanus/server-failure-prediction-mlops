@@ -39,3 +39,9 @@ server-failure-api-k8s.tar
 # Local MLflow data
 mlflow.db
 mlruns/
+
+# Local Kubernetes practice files
+secret.yaml
+eviction.json
+hpa-patch.json
+metrics-server-patch.json
