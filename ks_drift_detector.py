@@ -1,5 +1,6 @@
 import pandas as pd
 from scipy.stats import ks_2samp
+from pathlib import Path
 
 FEATURES = [
     "cpu_usage",
@@ -8,55 +9,66 @@ FEATURES = [
     "request_rate"
 ]
 
+ALPHA = 0.05
 
-def detect_data_drift(reference_data, current_data, alpha=0.05):
 
-    # Step 1: Validate columns
-    missing_reference = set(FEATURES) - set(reference_data.columns)
-    missing_current = set(FEATURES) - set(current_data.columns)
+def load_dataset(file_path):
+    data = pd.read_csv(file_path)
 
-    if missing_reference:
-        raise ValueError(
-            f"Missing reference features: {sorted(missing_reference)}"
-        )
+    if data.empty:
+        raise ValueError(f"Dataset is empty: {file_path}")
 
-    if missing_current:
-        raise ValueError(
-            f"Missing current features: {sorted(missing_current)}"
-        )
+    return data
 
-    # Step 2: Calculate Bonferroni threshold
-    number_of_tests = len(FEATURES)
-    adjusted_alpha = alpha / number_of_tests
+
+def detect_data_drift(reference_data, current_data, alpha=ALPHA):
+
+    # Validate required columns
+    for dataset_name, dataset in [
+        ("Reference", reference_data),
+        ("Production", current_data)
+    ]:
+        missing = set(FEATURES) - set(dataset.columns)
+
+        if missing:
+            raise ValueError(
+                f"{dataset_name} dataset missing columns: {sorted(missing)}"
+            )
+
+    # Calculate Bonferroni threshold
+    adjusted_alpha = alpha / len(FEATURES)
 
     results = []
 
-    # Step 3: Perform KS test for each feature
     for feature in FEATURES:
 
-        reference_values = reference_data[feature].dropna()
-        current_values = current_data[feature].dropna()
+        reference_values = pd.to_numeric(
+            reference_data[feature], errors="coerce"
+        ).dropna()
+
+        current_values = pd.to_numeric(
+            current_data[feature], errors="coerce"
+        ).dropna()
 
         if len(reference_values) < 2 or len(current_values) < 2:
             raise ValueError(
-                f"Feature '{feature}' needs at least two non-missing "
-                "values in each dataset."
+                f"Feature '{feature}' needs at least 2 valid values "
+                "in both datasets."
             )
 
         result = ks_2samp(
             reference_values,
             current_values,
             alternative="two-sided",
-            method="auto"
+            method="asymp"
         )
 
-        # Step 4: Compare p-value against adjusted threshold
         potential_drift = result.pvalue < adjusted_alpha
 
         results.append({
             "feature": feature,
             "reference_samples": len(reference_values),
-            "current_samples": len(current_values),
+            "production_samples": len(current_values),
             "ks_statistic": round(result.statistic, 4),
             "p_value": round(result.pvalue, 6),
             "adjusted_alpha": round(adjusted_alpha, 6),
@@ -68,30 +80,21 @@ def detect_data_drift(reference_data, current_data, alpha=0.05):
 
 if __name__ == "__main__":
 
-    reference_data = pd.DataFrame({
-        "cpu_usage": [25, 35, 40, 45, 55],
-        "memory_usage": [30, 40, 45, 50, 55],
-        "disk_usage": [35, 40, 45, 50, 55],
-        "request_rate": [100, 150, 200, 250, 300],
-    })
+    base_path = Path(__file__).parent
 
-    current_data = pd.DataFrame({
-        "cpu_usage": [82, 85, 90, 95, 98],
-        "memory_usage": [65, 70, 75, 80, 85],
-        "disk_usage": [40, 42, 45, 48, 50],
-        "request_rate": [700, 750, 800, 850, 900],
-    })
+    reference_path = base_path / "monitoring" / "reference_data.csv"
+    production_path = base_path / "monitoring" / "production_data.csv"
+
+    reference_data = load_dataset(reference_path)
+    production_data = load_dataset(production_path)
 
     report = detect_data_drift(
         reference_data,
-        current_data,
-        alpha=0.05
+        production_data
     )
 
-    print("\nKS-BASED DATA DRIFT REPORT")
+    print("\nPRODUCTION DATA DRIFT REPORT")
     print("=" * 100)
     print(report.to_string(index=False))
 
-    print("\nBonferroni correction applied.")
-    print("Original alpha: 0.05")
-    print(f"Adjusted alpha: {0.05 / len(FEATURES):.6f}")
+    print("\nMonitoring completed successfully.")
